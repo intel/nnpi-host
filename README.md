@@ -14,9 +14,9 @@ This repository contains the host low-level user-mode library and tests for Inte
 3. make
 4. sudo make install
 
-low-level user-mode library will be installed in /usr/local/lib/libnnpi_drv.so.0
-dummy_inference test program will be installed in /usr/local/bin/dummy_inference
-`
+The user-mode library will be installed in /usr/local/lib/libnnpi_drv.so.0.
+The dummy_inference test program will be installed in /usr/local/bin/dummy_inference.
+
 ## Tests
 **dummy_inference** - A test program that runs the entire flow of a real inference application, including
 allocating resources, schedule inference commands, DMA input/outputs to/from the device but without running
