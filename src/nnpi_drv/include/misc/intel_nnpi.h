@@ -9,11 +9,6 @@
 #include <linux/types.h>
 #include <linux/ioctl.h>
 #include <stdbool.h>
-#ifndef __KERNEL__
-#include <stdint.h>
-#else
-#include <linux/types.h>
-#endif
 
 #define NNPDRV_INF_HOST_DEV_NAME "nnpi_host"
 
@@ -91,58 +86,62 @@
  * usage_flags field of struct nnpdrv_ioctl_create_hostres.
  * It specify attribute and usage flags for a host resource.
  */
-#define IOCTL_INF_RES_INPUT          BIT(0) /* being read by the NNP-I device */
-#define IOCTL_INF_RES_OUTPUT         BIT(1) /* being written by the device */
+#define IOCTL_INF_RES_INPUT     (1u << 0) /* being read by the NNP-I device */
+#define IOCTL_INF_RES_OUTPUT    (1u << 1) /* being written by the device */
+#define IOCTL_RES_USAGE_VALID_MASK (IOCTL_INF_RES_INPUT | IOCTL_INF_RES_OUTPUT)
 
 /**
  * struct nnpdrv_ioctl_create_hostres - IOCTL_INF_CREATE_HOST_RESOURCE payload
- * @size: When set to zero on input, indicate to create a host resource
- *        which is attached to the dma-buf fd provided in @dma_buf field,
- *        On output it will include the host resource size.
- *        When set to non-zero value, the dma_buf field will be ignored and
- *        it specified the size in bytes of the memory to either allocate
- *        or pin.
- * @dma_buf: fd of dma-buf to attach to. Ignored if @size is not 0.
+ * @user_handle: User virtual address on input. Resource handle on output.
+ * @size: User memory size on input. Host resource size on output.
+ * @dma_buf: fd of dma-buf to attach to. Ignored if @user_handle is non-zero.
  * @usage_flags: resource usage flag bits, IOCTL_INF_RES_*
- * @user_handle: On input, if set to 0, indicate that memory for the resource
- *               needs to be allocated, otherwise it specified user virtual
- *               address that will be pinned by that resource.
- *               On output, it includes a handle to the host resource object
- *               that can be used with other IOCTLs later and for mapping to
- *               application user space.
  *
  * argument structure for IOCTL_INF_CREATE_HOST_RESOURCE ioctl
+ *
+ * The value of @user_handle on input determines whether the host resource is
+ * backed by user memory or by dma-buf object allocated by another driver.
+ * If @user_handle is non-zero it specified a user virtual address and @size
+ * should be initialized with it's size, the user memory will be pinned and will
+ * hold the host resource content.
+ * If @user_handle is zero on input, then @dma_buf should be initialized with a
+ * dma-buf file descriptor, this dma-buf will be attached.
+ *
+ * On output, @user_handle is a handle to the created host resource that can be
+ * used later with other IOCRLs and @size is the size of the host resource.
  */
 struct nnpdrv_ioctl_create_hostres {
+	__u64 user_handle;
 	__u64 size;
 	__u32 dma_buf;
 	__u32 usage_flags;
-	__u64 user_handle;
 };
 
 /**
  * struct nnpdrv_ioctl_lock_hostres - IOCTL_INF_LOCK_HOST_RESOURCE payload
  * @user_handle: handle to host resource object
- * @o_errno: On output, 0 on success, one of the NNPERR_* error codes on error.
+ * @o_errno: On input, must be set to 0.
+ *           On output, 0 on success, one of the NNPERR_* error codes on error.
  *
  * argument structure for IOCTL_INF_LOCK_HOST_RESOURCE and
  * IOCTL_INF_LOCK_HOST_RESOURCE ioctl calls.
  */
 struct nnpdrv_ioctl_lock_hostres {
 	__u64 user_handle;
-	__u8  o_errno;
+	__u32 o_errno;
 };
 
 /**
  * struct nnpdrv_ioctl_destroy_hostres - IOCTL_INF_DESTROY_HOST_RESOURCE payload
  * @user_handle: handle to host resource object
- * @o_errno: On output, 0 on success, one of the NNPERR_* error codes on error.
+ * @o_errno: On input, must be set to 0.
+ *           On output, 0 on success, one of the NNPERR_* error codes on error.
  *
  * argument structure for IOCTL_INF_DESTROY_HOST_RESOURCE ioctl
  */
 struct nnpdrv_ioctl_destroy_hostres {
 	__u64 user_handle;
-	__u8  o_errno;
+	__u32 o_errno;
 };
 
 /*
@@ -199,10 +198,7 @@ struct nnpdrv_ioctl_destroy_hostres {
 
 /**
  * struct ioctl_nnpi_create_channel - IOCTL_NNPI_DEVICE_CREATE_CHANNEL payload
- * @i_weight: controls how much command submission bandwidth this channel will
- *            get comparing to other channels. This value defines how much
- *            commands should be transmitted (if available) to the device from
- *            this channel before scheduling transmision from other channels.
+ * @i_weight: weight for command submission scheduling.
  * @i_host_fd: opened file descriptor to /dev/nnpi_host
  * @i_min_id: minimum range for channel id allocation
  * @i_max_id: maximum range for channel id allocation
@@ -212,9 +208,16 @@ struct nnpdrv_ioctl_destroy_hostres {
  *                      compiled with.
  * @o_fd: returns file-descriptor through which commands/responses can be
  *        write/read.
- * @o_channel_id: returns the unique id of the channel
  * @o_privileged: true if the channel is priviledged
- * @o_errno: On output, 0 on success, one of the NNPERR_* error codes on error.
+ * @o_errno: On input, must be set to 0.
+ *           On output, 0 on success, one of the NNPERR_* error codes on error.
+ * @o_channel_id: returns the unique id of the channel
+ *
+ * Argument structure for IOCTL_NNPI_DEVICE_CREATE_CHANNEL ioctl.
+ * @i_weight indicates the weight of this channel for command submission
+ * scheduling. It indicate how many commands should be sent from this channel
+ * (when available) before the command submission scheduler moves to handle
+ * commands from other channels.
  */
 struct ioctl_nnpi_create_channel {
 	__u32    i_weight;
@@ -222,31 +225,32 @@ struct ioctl_nnpi_create_channel {
 	__s32    i_min_id;
 	__s32    i_max_id;
 	__s32    i_get_device_events;
-	__u16    i_protocol_version;
+	__u32    i_protocol_version;
 	__s32    o_fd;
-	__u16    o_channel_id;
 	__s32    o_privileged;
-	__u8     o_errno;
+	__u32    o_errno;
+	__u16    o_channel_id;
 };
 
 /**
  * struct ioctl_nnpi_create_channel_data_ringbuf
+ * @i_hostres_handle: handle of a host resource which will be used to hold
+ *         the ring-buffer content.
  * @i_channel_id: command channel id.
  * @i_id: id of the ring buffer object (can be 0 or 1).
  * @i_h2c: non-zero if this ring-buffer is for command submission use,
  *         otherwise it is for responses.
- * @i_hostres_handle: handle of a host resource which will be used to hold
- *         the ring-buffer content.
- * @o_errno: On output, 0 on success, one of the NNPERR_* error codes on error.
+ * @o_errno: On input, must be set to 0.
+ *           On output, 0 on success, one of the NNPERR_* error codes on error.
  *
  * this is the payload for IOCTL_NNPI_DEVICE_CREATE_CHANNEL_RB ioctl
  */
 struct ioctl_nnpi_create_channel_data_ringbuf {
-	__u16 i_channel_id;
-	__u8  i_id;
-	__u8  i_h2c;
 	__u64 i_hostres_handle;
-	__u8  o_errno;
+	__u32 i_channel_id;
+	__u32 i_id;
+	__u32 i_h2c;
+	__u32 o_errno;
 };
 
 /**
@@ -255,48 +259,51 @@ struct ioctl_nnpi_create_channel_data_ringbuf {
  * @i_id: id of the ring buffer object (can be 0 or 1).
  * @i_h2c: true if this ring-buffer is for command submission use,
  *         otherwise it is for responses.
- * @o_errno: On output, 0 on success, one of the NNPERR_* error codes on error.
+ * @o_errno: On input, must be set to 0.
+ *           On output, 0 on success, one of the NNPERR_* error codes on error.
  *
  * this is the payload for IOCTL_NNPI_DEVICE_DESTROY_CHANNEL_RB ioctl
  */
 struct ioctl_nnpi_destroy_channel_data_ringbuf {
-	__u16 i_channel_id;
-	__u8  i_id;
-	__u8  i_h2c;
-	__u8  o_errno;
+	__u32 i_channel_id;
+	__u32 i_id;
+	__u32 i_h2c;
+	__u32 o_errno;
 };
 
 /**
  * struct ioctl_nnpi_channel_map_hostres
- * @i_channel_id: command channel id.
  * @i_hostres_handle: handle of a host resource to be mapped
+ * @i_channel_id: command channel id.
  * @o_map_id: returns unique id of the mapping
  * @o_sync_needed: returns non-zero if LOCK/UNLOCK_HOST_RESOURCE ioctls
  *            needs to be used before/after accessing the resource from cpu.
- * @o_errno: On output, 0 on success, one of the NNPERR_* error codes on error.
+ * @o_errno: On input, must be set to 0.
+ *           On output, 0 on success, one of the NNPERR_* error codes on error.
  *
  * this is the payload for IOCTL_NNPI_DEVICE_CHANNEL_MAP_HOSTRES ioctl
  */
 struct ioctl_nnpi_channel_map_hostres {
-	__u16 i_channel_id;
 	__u64 i_hostres_handle;
-	__u16 o_map_id;
-	__u8  o_sync_needed;
-	__u8  o_errno;
+	__u32 i_channel_id;
+	__u32 o_map_id;
+	__u32 o_sync_needed;
+	__u32 o_errno;
 };
 
 /**
  * ioctl_nnpi_channel_unmap_hostres
  * @i_channel_id: command channel id.
  * @i_map_id: mapping id
- * @o_errno: On output, 0 on success, one of the NNPERR_* error codes on error.
+ * @o_errno: On input, must be set to 0.
+ *           On output, 0 on success, one of the NNPERR_* error codes on error.
  *
  * This is the payload for IOCTL_NNPI_DEVICE_CHANNEL_UNMAP_HOSTRES ioctl
  */
 struct ioctl_nnpi_channel_unmap_hostres {
-	__u16 i_channel_id;
-	__u16 i_map_id;
-	__u8  o_errno;
+	__u32 i_channel_id;
+	__u32 i_map_id;
+	__u32 o_errno;
 };
 
 /****************************************************************

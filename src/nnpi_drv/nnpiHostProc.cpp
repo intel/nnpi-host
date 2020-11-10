@@ -82,35 +82,28 @@ int nnpiHostRes::create(uint64_t          byte_size,
 			nnpiHostRes::ptr &out_hostRes)
 {
 	struct nnpdrv_ioctl_create_hostres args;
-	struct nnpdrv_ioctl_destroy_hostres destroy_args;
-	int ret, prot;
+	int ret;
 	nnpiHostProc::ptr proc(nnpiHostProc::get());
 
 	if (proc->get() == nullptr)
 		return ENODEV;
 
+	if (!byte_size)
+		return EINVAL;
+
+	void *mapped_ptr = mmap(0, byte_size, PROT_READ | PROT_WRITE,
+				MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+	if (mapped_ptr == MAP_FAILED)
+		return ENOMEM;
+
 	memset(&args, 0, sizeof(args));
+	args.user_handle = (__u64)(uintptr_t)mapped_ptr;
 	args.size = byte_size;
 	args.usage_flags = usage_flags;
 
 	ret = ioctl(proc->fd(), IOCTL_INF_CREATE_HOST_RESOURCE, &args);
 	if (ret < 0)
-		return errno;
-
-	prot = (usage_flags & NNP_RESOURCE_USAGE_NN_INPUT  ? PROT_WRITE  : 0) |
-	       (usage_flags & NNP_RESOURCE_USAGE_NN_OUTPUT ? PROT_READ : 0);
-
-	nnpiGlobalLock();
-	void *mapped_ptr = mmap(NULL, byte_size, prot, MAP_SHARED, proc->fd(), args.user_handle << page_shift());
-	if (mapped_ptr == NULL || mapped_ptr == MAP_FAILED) {
-		nnpiGlobalUnlock();
-		goto err_destroy;
-	}
-	//set memory mapping to be preserved only for parent process after fork
-	ret = madvise(mapped_ptr, byte_size, MADV_DONTFORK);
-	if (ret < 0)
-		nnp_log_err(CREATE_COMMAND_LOG, "madvise failed with errno: %d.\n", errno);
-	nnpiGlobalUnlock();
+		goto err_free;
 
 	out_hostRes.reset( new nnpiHostRes(byte_size,
 					   usage_flags,
@@ -121,11 +114,8 @@ int nnpiHostRes::create(uint64_t          byte_size,
 
 	return 0;
 
-err_destroy:
-	memset(&destroy_args, 0, sizeof(destroy_args));
-	destroy_args.user_handle = args.user_handle;
-
-	ioctl(proc->fd(), IOCTL_INF_DESTROY_HOST_RESOURCE, &destroy_args);
+err_free:
+	munmap(mapped_ptr, byte_size);
 
 	if (errno != 0)
 		return errno;
@@ -334,7 +324,7 @@ void nnpiHostRes::unlock_device_access(bool for_write)
 
 nnpiHostRes::~nnpiHostRes()
 {
-	if (m_cpu_addr != NULL && m_mapped)
+	if (m_cpu_addr != NULL && m_alloced)
 		munmap(m_cpu_addr, m_byte_size);
 
 	if (m_proc->fd() >= 0) {

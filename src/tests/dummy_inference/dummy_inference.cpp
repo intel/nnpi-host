@@ -62,7 +62,7 @@ static nnpdrvinfSchedParams schedParams;
 
 #define ASSERT_EQ(lhs,rhs) \
 	if ((lhs) != (rhs)) { \
-		fprintf(stderr, "Line %d " #lhs " != " #rhs "\n", __LINE__); \
+		fprintf(stderr, "Line %d " #lhs "(%d) != " #rhs "(%d)\n", __LINE__, (lhs), (rhs)); \
 		return -1; \
 	}
 

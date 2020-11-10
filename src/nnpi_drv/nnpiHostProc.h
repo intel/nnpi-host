@@ -88,7 +88,7 @@ private:
 		    uint32_t usage_flags,
 		    uint64_t kmd_handle,
 		    void    *mappedAddr,
-		    bool     mapped,
+		    bool     alloced,
 		    const nnpiHostProc::ptr &proc) :
 		m_allocated(true),
 		m_dmaBuf_fd(-1),
@@ -97,7 +97,7 @@ private:
 		m_kmd_handle(kmd_handle),
 		m_failed_copy_ops(0),
 		m_cpu_addr(mappedAddr),
-		m_mapped(mapped),
+		m_alloced(alloced),
 		m_proc(proc),
 		m_readers(0),
 		m_cpu_locked(0),
@@ -118,7 +118,7 @@ private:
 		m_kmd_handle(kmd_handle),
 		m_failed_copy_ops(0),
 		m_cpu_addr(NULL),
-		m_mapped(false),
+		m_alloced(false),
 		m_proc(proc),
 		m_readers(0),
 		m_cpu_locked(0),
@@ -138,7 +138,7 @@ private:
 	const uint64_t   m_kmd_handle;
 	std::atomic<int>  m_failed_copy_ops;
 	void            *m_cpu_addr;
-	bool             m_mapped;
+	bool             m_alloced;
 
 	nnpiHostProc::ptr m_proc;
 	nnpiWaitQueue    m_waitq;
