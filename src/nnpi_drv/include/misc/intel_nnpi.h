@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0-or-later WITH Linux-syscall-note */
+/* SPDX-License-Identifier: GPL-2.0-only WITH Linux-syscall-note */
 
 /********************************************
  * Copyright (C) 2019-2020 Intel Corporation
@@ -22,16 +22,12 @@
  * A request to create a host memory resource object that can then be mapped
  * and accessed by the NNP-I device's DMA engine.
  * The created host resource is pinned in memory for its entire lifecycle.
- * Depending on the argument of the IOCTL, the memory of the resource can be
- * allocated by the IOCTL call, it can be backed by user allocated memory which
- * get pinned by the IOCTL or it can be backed by dma-buf object created by
- * another driver.
+ * The memory of the resource is backed by user allocated memory which
+ * get pinned by the IOCTL.
  *
- * See describtion of nnpdrv_ioctl_create_hostres structure for more details.
+ * See description of nnpdrv_ioctl_create_hostres structure for more details.
  *
- * The ioctl returns a handle to the created host resource, this returned handle
- * can also be used in the offset argument of mmap(2) for mapping the resource
- * to the application address space.
+ * The ioctl returns a handle to the created host resource.
  */
 #define IOCTL_INF_CREATE_HOST_RESOURCE      \
 	_IOWR('h', 0, struct nnpdrv_ioctl_create_hostres)
@@ -64,7 +60,7 @@
  * When such synchronization is needed:
  * When application wants to change host resource content to be read by the
  * device, it should first lock it for write, change its content by accessing
- * it's mmaped virtual address and then call this ioctl again to unlock it
+ * it's mapped virtual address and then call this ioctl again to unlock it
  * before sending a command to the device which may read the resource.
  * When the application received indication that the device has changed the
  * resource content, it should first lock the resource for reading before
@@ -92,29 +88,25 @@
 
 /**
  * struct nnpdrv_ioctl_create_hostres - IOCTL_INF_CREATE_HOST_RESOURCE payload
- * @user_handle: User virtual address on input. Resource handle on output.
+ * @user_ptr: User virtual address.
  * @size: User memory size on input. Host resource size on output.
- * @dma_buf: fd of dma-buf to attach to. Ignored if @user_handle is non-zero.
  * @usage_flags: resource usage flag bits, IOCTL_INF_RES_*
+ * @user_handle: resource handle on output.
  *
  * argument structure for IOCTL_INF_CREATE_HOST_RESOURCE ioctl
  *
- * The value of @user_handle on input determines whether the host resource is
- * backed by user memory or by dma-buf object allocated by another driver.
- * If @user_handle is non-zero it specified a user virtual address and @size
+ * @user_ptr should be initialized to a user virtual address and @size
  * should be initialized with it's size, the user memory will be pinned and will
  * hold the host resource content.
- * If @user_handle is zero on input, then @dma_buf should be initialized with a
- * dma-buf file descriptor, this dma-buf will be attached.
  *
  * On output, @user_handle is a handle to the created host resource that can be
- * used later with other IOCRLs and @size is the size of the host resource.
+ * used later with other IOCTLs and @size is the size of the host resource.
  */
 struct nnpdrv_ioctl_create_hostres {
-	__u64 user_handle;
+	__u64 user_ptr;
 	__u64 size;
-	__u32 dma_buf;
 	__u32 usage_flags;
+	__s32 user_handle;
 };
 
 /**
@@ -127,7 +119,7 @@ struct nnpdrv_ioctl_create_hostres {
  * IOCTL_INF_LOCK_HOST_RESOURCE ioctl calls.
  */
 struct nnpdrv_ioctl_lock_hostres {
-	__u64 user_handle;
+	__s32 user_handle;
 	__u32 o_errno;
 };
 
@@ -140,7 +132,7 @@ struct nnpdrv_ioctl_lock_hostres {
  * argument structure for IOCTL_INF_DESTROY_HOST_RESOURCE ioctl
  */
 struct nnpdrv_ioctl_destroy_hostres {
-	__u64 user_handle;
+	__s32 user_handle;
 	__u32 o_errno;
 };
 
@@ -198,7 +190,6 @@ struct nnpdrv_ioctl_destroy_hostres {
 
 /**
  * struct ioctl_nnpi_create_channel - IOCTL_NNPI_DEVICE_CREATE_CHANNEL payload
- * @i_weight: weight for command submission scheduling.
  * @i_host_fd: opened file descriptor to /dev/nnpi_host
  * @i_min_id: minimum range for channel id allocation
  * @i_max_id: maximum range for channel id allocation
@@ -208,26 +199,19 @@ struct nnpdrv_ioctl_destroy_hostres {
  *                      compiled with.
  * @o_fd: returns file-descriptor through which commands/responses can be
  *        write/read.
- * @o_privileged: true if the channel is priviledged
  * @o_errno: On input, must be set to 0.
  *           On output, 0 on success, one of the NNPERR_* error codes on error.
  * @o_channel_id: returns the unique id of the channel
  *
  * Argument structure for IOCTL_NNPI_DEVICE_CREATE_CHANNEL ioctl.
- * @i_weight indicates the weight of this channel for command submission
- * scheduling. It indicate how many commands should be sent from this channel
- * (when available) before the command submission scheduler moves to handle
- * commands from other channels.
  */
 struct ioctl_nnpi_create_channel {
-	__u32    i_weight;
 	__s32    i_host_fd;
-	__s32    i_min_id;
-	__s32    i_max_id;
+	__u32    i_min_id;
+	__u32    i_max_id;
 	__s32    i_get_device_events;
 	__u32    i_protocol_version;
 	__s32    o_fd;
-	__s32    o_privileged;
 	__u32    o_errno;
 	__u16    o_channel_id;
 };
@@ -246,7 +230,7 @@ struct ioctl_nnpi_create_channel {
  * this is the payload for IOCTL_NNPI_DEVICE_CREATE_CHANNEL_RB ioctl
  */
 struct ioctl_nnpi_create_channel_data_ringbuf {
-	__u64 i_hostres_handle;
+	__s32 i_hostres_handle;
 	__u32 i_channel_id;
 	__u32 i_id;
 	__u32 i_h2c;
@@ -284,7 +268,7 @@ struct ioctl_nnpi_destroy_channel_data_ringbuf {
  * this is the payload for IOCTL_NNPI_DEVICE_CHANNEL_MAP_HOSTRES ioctl
  */
 struct ioctl_nnpi_channel_map_hostres {
-	__u64 i_hostres_handle;
+	__s32 i_hostres_handle;
 	__u32 i_channel_id;
 	__u32 o_map_id;
 	__u32 o_sync_needed;

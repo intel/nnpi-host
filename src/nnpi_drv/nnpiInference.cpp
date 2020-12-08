@@ -339,35 +339,7 @@ NNPError nnpdrvCreateDmaBufHostResource(int              dmaBuf,
 					uint32_t         usageFlags,
 					NNPHostResource *outHostRes)
 {
-	nnpiHostRes::ptr hostres;
-	int rc;
-
-	if (!outHostRes)
-		return NNP_INVALID_ARGUMENT;
-
-	if ((usageFlags & NNP_RESOURCE_USAGE_NETWORK) != 0)
-		return NNP_NOT_SUPPORTED;
-
-	rc = nnpiHostRes::createFromDmaBuf(dmaBuf,
-					   usageFlags,
-					   hostres);
-	if (rc != 0) {
-		switch (rc) {
-		case ENODEV:
-			return NNP_NO_SUCH_DEVICE;
-		case ENOMEM:
-			return NNP_OUT_OF_MEMORY;
-		case EINVAL:
-			return NNP_INVALID_ARGUMENT;
-		default:
-			return NNP_IO_ERROR;
-		}
-	}
-
-	*outHostRes = nnpiHostRes::handle_map.makeHandle(hostres);
-	hostres->set_user_hdl(*outHostRes);
-
-	return NNP_NO_ERROR;
+	return NNP_NOT_SUPPORTED;
 }
 
 NNPError nnpdrvCreateHostResourceFromBuf(const void      *buf,

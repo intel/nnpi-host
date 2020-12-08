@@ -282,7 +282,6 @@ int nnpiDevice::createChannel(const nnpiHostProc::ptr &host,
 	std::unique_lock<std::mutex> lock(m_mutex);
 	do {
 		memset(&req, 0, sizeof(req));
-		req.i_weight = weight;
 		req.i_host_fd = host->fd();
 		req.i_min_id = (is_context ? 0 : 256);
 		req.i_max_id = (is_context ? 255 : (1 << NNP_IPC_CHANNEL_BITS) - 1);
@@ -303,7 +302,7 @@ int nnpiDevice::createChannel(const nnpiHostProc::ptr &host,
 
 	*out_id = req.o_channel_id;
 	*out_fd = req.o_fd;
-	*out_privileged = req.o_privileged;
+	*out_privileged = (getuid() == 0);
 
 	return 0;
 }
@@ -382,7 +381,7 @@ int nnpiDevice::destroyChannelRingBuffer(uint16_t  channel_id,
 		ret = ioctl(m_fd, IOCTL_NNPI_DEVICE_DESTROY_CHANNEL_RB, &req);
 	} while (ret < 0 && errno == EINTR);
 
-	if (ret != 0 && req.o_errno == 0)
+	if (ret != 0)
 		return errno;
 
 	return req.o_errno;

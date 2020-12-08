@@ -48,10 +48,6 @@ public:
 			  uint32_t          usage_flags,
 			  nnpiHostRes::ptr &out_hostRes);
 
-	static int createFromDmaBuf(int               dmaBuf_fd,
-				    uint32_t          usage_flags,
-				    nnpiHostRes::ptr &out_hostRes);
-
 	static int createFromBuf(const void       *buf,
 				 uint64_t          byte_size,
 				 uint32_t          usage_flags,
@@ -69,7 +65,7 @@ public:
 	bool allocated() const { return m_allocated; }
 	int  dmaBuf_fd() const { return m_dmaBuf_fd; }
 	uint64_t size() const { return m_byte_size; }
-	uint64_t kmd_handle() const { return m_kmd_handle; }
+	int kmd_handle() const { return m_kmd_handle; }
 	void *vaddr() const { return m_cpu_addr; }
 	uint32_t usageFlags() const { return m_usage_flags; }
 	void enableCPUsync() { m_cpu_sync_needed = true; }
@@ -86,7 +82,7 @@ public:
 private:
 	nnpiHostRes(uint64_t byte_size,
 		    uint32_t usage_flags,
-		    uint64_t kmd_handle,
+		    int      kmd_handle,
 		    void    *mappedAddr,
 		    bool     alloced,
 		    const nnpiHostProc::ptr &proc) :
@@ -109,7 +105,7 @@ private:
 	nnpiHostRes(uint64_t byte_size,
 		    int      dmaBuf_fd,
 		    uint32_t usage_flags,
-		    uint64_t kmd_handle,
+		    int      kmd_handle,
 		    const nnpiHostProc::ptr &proc) :
 		m_allocated(false),
 		m_dmaBuf_fd(dmaBuf_fd),
@@ -135,7 +131,7 @@ private:
 	const int        m_dmaBuf_fd;
 	const uint32_t   m_usage_flags;
 	const uint64_t   m_byte_size;
-	const uint64_t   m_kmd_handle;
+	const int        m_kmd_handle;
 	std::atomic<int>  m_failed_copy_ops;
 	void            *m_cpu_addr;
 	bool             m_alloced;

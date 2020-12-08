@@ -67,16 +67,6 @@ nnpiHostProc::~nnpiHostProc()
 		close(m_fd);
 }
 
-static inline unsigned int page_shift(void)
-{
-	static unsigned int pshift;
-
-	if (pshift == 0)
-		pshift = ffs(sysconf(_SC_PAGESIZE)) - 1;
-
-	return pshift;
-}
-
 int nnpiHostRes::create(uint64_t          byte_size,
 			uint32_t          usage_flags,
 			nnpiHostRes::ptr &out_hostRes)
@@ -96,8 +86,9 @@ int nnpiHostRes::create(uint64_t          byte_size,
 	if (mapped_ptr == MAP_FAILED)
 		return ENOMEM;
 
+	memset(mapped_ptr, 0, byte_size);
 	memset(&args, 0, sizeof(args));
-	args.user_handle = (__u64)(uintptr_t)mapped_ptr;
+	args.user_ptr = (__u64)(uintptr_t)mapped_ptr;
 	args.size = byte_size;
 	args.usage_flags = usage_flags;
 
@@ -123,35 +114,6 @@ err_free:
 	return EFAULT;
 }
 
-int nnpiHostRes::createFromDmaBuf(int               dmaBuf_fd,
-				  uint32_t          usage_flags,
-				  nnpiHostRes::ptr &out_hostRes)
-{
-	struct nnpdrv_ioctl_create_hostres args;
-	int ret;
-	nnpiHostProc::ptr proc(nnpiHostProc::get());
-
-	if (proc->get() == nullptr)
-		return ENODEV;
-
-	memset(&args, 0, sizeof(args));
-	args.size = 0;
-	args.dma_buf = dmaBuf_fd;
-	args.usage_flags = usage_flags;
-
-	ret = ioctl(proc->fd(), IOCTL_INF_CREATE_HOST_RESOURCE, &args);
-	if (ret < 0)
-		return errno;
-
-	out_hostRes.reset( new nnpiHostRes(args.size,
-					   dmaBuf_fd,
-					   usage_flags,
-					   args.user_handle,
-					   proc) );
-
-	return 0;
-}
-
 int nnpiHostRes::createFromBuf(const void       *buf,
 			       uint64_t          byte_size,
 			       uint32_t          usage_flags,
@@ -167,7 +129,7 @@ int nnpiHostRes::createFromBuf(const void       *buf,
 	memset(&args, 0, sizeof(args));
 	args.size = byte_size;
 	args.usage_flags = usage_flags;
-	args.user_handle = (uint64_t)(uintptr_t)buf;
+	args.user_ptr = (uint64_t)(uintptr_t)buf;
 
 	ret = ioctl(proc->fd(), IOCTL_INF_CREATE_HOST_RESOURCE, &args);
 	if (ret < 0)
