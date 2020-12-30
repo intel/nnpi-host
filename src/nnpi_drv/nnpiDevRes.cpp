@@ -72,6 +72,47 @@ NNPError nnpiDevRes::markDirty()
 
 	return m_ctx->markDevResDirty(m_id);
 }
+
+NNPError nnpiDevRes::d2d_pair(nnpiDevRes::ptr peer)
+{
+	union h2c_ChanConnectPeers msg;
+	union c2h_event_report reply;
+	ssize_t ret;
+
+	if (peer.get() != nullptr) { //connect
+		if (m_peer.get() != nullptr)
+			return NNP_DEVICE_BUSY;
+		assert(((m_flags & peer->m_flags) & (NNP_RESOURECE_USAGE_P2P_SRC | NNP_RESOURECE_USAGE_P2P_DST)) == 0);
+		msg.peer_buf_id = peer->m_buf_id;
+		msg.peer_dev_id = peer->m_ctx->device()->number();
+		msg.disconnect = 0;
+	} else {
+		msg.disconnect = 1;
+	}
+	msg.chan_id = m_ctx->chan()->id();
+	msg.opcode = NNP_IPC_H2C_OP_CHAN_P2P_CONNECT_PEERS;
+	msg.p2p_tr_id = m_ctx->getP2PtransactionID();
+	msg.buf_id = m_buf_id;
+	msg.is_src_buf = !!(m_flags & NNP_RESOURECE_USAGE_P2P_SRC);
+
+	m_ctx->mutex().lock();
+	ret = m_ctx->chan()->write(&msg, sizeof(msg));
+	m_ctx->mutex().unlock();
+	if (ret != (ssize_t)sizeof(msg))
+		return NNP_IO_ERROR;
+
+	if (peer.get() != nullptr) { //connect
+		m_ctx->wait_create_command(InfContextObjID(INF_OBJ_TYPE_P2P, msg.p2p_tr_id), reply);
+		if (m_ctx->broken())
+			return NNP_CONTEXT_BROKEN;
+		else if (reply.event_val != 0)
+			return event_valToNNPError(reply.event_val);
+	}
+	m_peer = peer;
+
+	return NNP_NO_ERROR;
+}
+
 nnpiDevRes::~nnpiDevRes()
 {
 }

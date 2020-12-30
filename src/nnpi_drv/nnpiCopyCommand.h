@@ -170,6 +170,7 @@ public:
 		return m_need_prepare;
 	}
 
+	void unpair_d2d_devreses();
 private:
 	explicit nnpiCopyCommand(nnpiInfContext::ptr ctx,
 				 uint16_t            protocol_id,
@@ -220,7 +221,7 @@ private:
 		m_hostres_map_id(USHRT_MAX),
 		m_c2h(true),
 		m_user_hdl(0),
-		m_need_prepare(true),
+		m_need_prepare(false),
 		m_is_d2d(true),
 		m_scheduled(false),
 		m_src_devres(src_devres)

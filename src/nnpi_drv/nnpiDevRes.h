@@ -34,6 +34,7 @@ public:
 	}
 
 	NNPError markDirty();
+	NNPError d2d_pair(nnpiDevRes::ptr peer);
 
 	void set_user_hdl(uint64_t user_hdl) { m_user_hdl = user_hdl; }
 	uint64_t user_hdl() const { return m_user_hdl; }
@@ -56,6 +57,7 @@ private:
 		m_flags(flags),
 		m_host_addr(host_addr),
 		m_buf_id(buf_id),
+		m_peer(nullptr),
 		m_user_hdl(0)
 	{
 	}
@@ -68,5 +70,6 @@ private:
 	const uint32_t m_flags;
 	const uint64_t m_host_addr;
 	const uint8_t m_buf_id;
+	nnpiDevRes::ptr m_peer;
 	uint64_t m_user_hdl;
 };

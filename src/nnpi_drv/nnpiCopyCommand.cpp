@@ -77,12 +77,12 @@ NNPError nnpiCopyCommand::create(nnpiInfContext::ptr ctx,
 NNPError nnpiCopyCommand::update_peers(nnpiDevRes::ptr dst_devres, nnpiDevRes::ptr src_devres)
 {
 	union h2c_ChanGetCrFIFO get_cr_fifo_msg;
-	union h2c_ChanConnectPeers connect_peers_msg;
-	union h2c_ChanUpdatePeerDev uupdate_peer_dev_msg;
+	union h2c_ChanUpdatePeerDev update_peer_dev_msg;
 	union c2h_event_report reply;
 	int rc;
 	uint64_t rel_cr_fifo_addr;
 	uint64_t fw_cr_fifo_addr;
+	NNPError ret;
 
 	/* Ask producer device for release credit FIFO */
 	get_cr_fifo_msg.chan_id = src_devres->m_ctx->chan()->id();
@@ -97,6 +97,10 @@ NNPError nnpiCopyCommand::update_peers(nnpiDevRes::ptr dst_devres, nnpiDevRes::p
 				  reply);
 	if (rc != 0)
 		return NNP_IO_ERROR;
+	else if (src_devres->m_ctx->broken())
+		return NNP_CONTEXT_BROKEN;
+	else if (reply.event_val != 0)
+		return event_valToNNPError(reply.event_val);
 
 	rel_cr_fifo_addr = src_devres->m_ctx->chan()->device()->bar2() + (reply.obj_id_2 << NNP_PAGE_SHIFT);
 
@@ -113,75 +117,78 @@ NNPError nnpiCopyCommand::update_peers(nnpiDevRes::ptr dst_devres, nnpiDevRes::p
 				  reply);
 	if (rc != 0)
 		return NNP_IO_ERROR;
+	else if (dst_devres->m_ctx->broken())
+		return NNP_CONTEXT_BROKEN;
+	else if (reply.event_val != 0)
+		return event_valToNNPError(reply.event_val);
 
 	fw_cr_fifo_addr = dst_devres->m_ctx->chan()->device()->bar2() + (reply.obj_id_2 << NNP_PAGE_SHIFT);
 
-	/* Connect peers on consumer device */
-	connect_peers_msg.chan_id = src_devres->m_ctx->chan()->id();
-	connect_peers_msg.opcode = NNP_IPC_H2C_OP_CHAN_P2P_CONNECT_PEERS;
-	connect_peers_msg.p2p_tr_id = src_devres->m_ctx->getP2PtransactionID();
-	connect_peers_msg.buf_id = src_devres->buf_id();
-	connect_peers_msg.peer_buf_id = dst_devres->buf_id();
-	connect_peers_msg.is_src_buf = 1;
-	connect_peers_msg.peer_dev_id = dst_devres->m_ctx->device()->number();
-
-	rc = src_devres->m_ctx->send_create_command(&connect_peers_msg,
-				  sizeof(connect_peers_msg),
-				  InfContextObjID(INF_OBJ_TYPE_P2P, connect_peers_msg.p2p_tr_id),
-				  reply);
-	if (rc != 0)
-		return NNP_IO_ERROR;
-
-	/* Connect peers on producer device */
-	connect_peers_msg.chan_id = dst_devres->m_ctx->chan()->id();
-	connect_peers_msg.opcode = NNP_IPC_H2C_OP_CHAN_P2P_CONNECT_PEERS;
-	connect_peers_msg.p2p_tr_id = dst_devres->m_ctx->getP2PtransactionID();
-	connect_peers_msg.buf_id = dst_devres->buf_id();
-	connect_peers_msg.peer_buf_id = src_devres->buf_id();
-	connect_peers_msg.is_src_buf = 0;
-	connect_peers_msg.peer_dev_id = src_devres->m_ctx->device()->number();
-
-	rc = dst_devres->m_ctx->send_create_command(&connect_peers_msg,
-				  sizeof(connect_peers_msg),
-				  InfContextObjID(INF_OBJ_TYPE_P2P, connect_peers_msg.p2p_tr_id),
-				  reply);
-	if (rc != 0)
-		return NNP_IO_ERROR;
-
 	/* Send to producer device cr fifo addr and db addr of consumer */
-	uupdate_peer_dev_msg.chan_id = src_devres->m_ctx->chan()->id();
-	uupdate_peer_dev_msg.opcode = NNP_IPC_H2C_OP_CHAN_P2P_UPDATE_PEER_DEV;
-	uupdate_peer_dev_msg.p2p_tr_id = src_devres->m_ctx->getP2PtransactionID();
-	uupdate_peer_dev_msg.dev_id = dst_devres->m_ctx->device()->number();
-	uupdate_peer_dev_msg.is_producer = 0;
-	uupdate_peer_dev_msg.cr_fifo_addr = (fw_cr_fifo_addr >> NNP_PAGE_SHIFT);
-	uupdate_peer_dev_msg.db_addr = dst_devres->m_ctx->chan()->device()->bar0() + MSB_DB_OFFSET;
+	update_peer_dev_msg.chan_id = src_devres->m_ctx->chan()->id();
+	update_peer_dev_msg.opcode = NNP_IPC_H2C_OP_CHAN_P2P_UPDATE_PEER_DEV;
+	update_peer_dev_msg.p2p_tr_id = src_devres->m_ctx->getP2PtransactionID();
+	update_peer_dev_msg.dev_id = dst_devres->m_ctx->device()->number();
+	update_peer_dev_msg.is_producer = 0;
+	update_peer_dev_msg.cr_fifo_addr = (fw_cr_fifo_addr >> NNP_PAGE_SHIFT);
+	update_peer_dev_msg.db_addr = dst_devres->m_ctx->chan()->device()->bar0() + MSB_DB_OFFSET;
 
-	rc = src_devres->m_ctx->send_create_command(&uupdate_peer_dev_msg,
-				  sizeof(uupdate_peer_dev_msg),
-				  InfContextObjID(INF_OBJ_TYPE_P2P, uupdate_peer_dev_msg.p2p_tr_id),
+	rc = src_devres->m_ctx->send_create_command(&update_peer_dev_msg,
+				  sizeof(update_peer_dev_msg),
+				  InfContextObjID(INF_OBJ_TYPE_P2P, update_peer_dev_msg.p2p_tr_id),
 				  reply);
 	if (rc != 0)
 		return NNP_IO_ERROR;
+	else if (src_devres->m_ctx->broken())
+		return NNP_CONTEXT_BROKEN;
+	else if (reply.event_val != 0)
+		return event_valToNNPError(reply.event_val);
 
 	/* Send to consumer device cr fifo addr and db addr of producer */
-	uupdate_peer_dev_msg.chan_id = dst_devres->m_ctx->chan()->id();
-	uupdate_peer_dev_msg.opcode = NNP_IPC_H2C_OP_CHAN_P2P_UPDATE_PEER_DEV;
-	uupdate_peer_dev_msg.p2p_tr_id = dst_devres->m_ctx->getP2PtransactionID();
-	uupdate_peer_dev_msg.dev_id = src_devres->m_ctx->device()->number();
-	uupdate_peer_dev_msg.is_producer = 1;
-	uupdate_peer_dev_msg.cr_fifo_addr = (rel_cr_fifo_addr >> NNP_PAGE_SHIFT);
-	uupdate_peer_dev_msg.db_addr = src_devres->m_ctx->chan()->device()->bar0() + MSB_DB_OFFSET;
+	update_peer_dev_msg.chan_id = dst_devres->m_ctx->chan()->id();
+	update_peer_dev_msg.opcode = NNP_IPC_H2C_OP_CHAN_P2P_UPDATE_PEER_DEV;
+	update_peer_dev_msg.p2p_tr_id = dst_devres->m_ctx->getP2PtransactionID();
+	update_peer_dev_msg.dev_id = src_devres->m_ctx->device()->number();
+	update_peer_dev_msg.is_producer = 1;
+	update_peer_dev_msg.cr_fifo_addr = (rel_cr_fifo_addr >> NNP_PAGE_SHIFT);
+	update_peer_dev_msg.db_addr = src_devres->m_ctx->chan()->device()->bar0() + MSB_DB_OFFSET;
 
-	rc = dst_devres->m_ctx->send_create_command(&uupdate_peer_dev_msg,
-				  sizeof(uupdate_peer_dev_msg),
-				  InfContextObjID(INF_OBJ_TYPE_P2P, uupdate_peer_dev_msg.p2p_tr_id),
+	rc = dst_devres->m_ctx->send_create_command(&update_peer_dev_msg,
+				  sizeof(update_peer_dev_msg),
+				  InfContextObjID(INF_OBJ_TYPE_P2P, update_peer_dev_msg.p2p_tr_id),
 				  reply);
 	if (rc != 0)
 		return NNP_IO_ERROR;
+	else if (dst_devres->m_ctx->broken())
+		return NNP_CONTEXT_BROKEN;
+	else if (reply.event_val != 0)
+		return event_valToNNPError(reply.event_val);
+
+	/* Connect peers on producer device */
+	ret = src_devres->d2d_pair(dst_devres);
+	if (ret != NNP_NO_ERROR)
+		return ret;
+
+	/* Connect peers on consumer device */
+	ret = dst_devres->d2d_pair(src_devres);
+	if (ret != NNP_NO_ERROR) {
+		src_devres->d2d_pair(nullptr);
+		return ret;
+	}
 
 	return NNP_NO_ERROR;
+}
 
+void nnpiCopyCommand::unpair_d2d_devreses()
+{
+	if (!m_is_d2d)
+		return;
+
+	/* Unpair peer on producer device */
+	m_src_devres->d2d_pair(nullptr);
+
+	/* Unpair peer on consumer device */
+	m_devres->d2d_pair(nullptr);
 }
 
 NNPError nnpiCopyCommand::create_d2d(nnpiInfContext::ptr ctx,
